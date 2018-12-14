@@ -10,13 +10,15 @@ const REGSIZE: usize = 0xFF / 4;
 
 pub struct VMScript {
     pc: usize,  // Program Counter -- will be used as an index, could be u8 otherwise
-    rem: u128,  // Remainder for DIV
     f_eq: bool, // is_equal flag
     f_lt: bool, // lessthan flag
     f_gt: bool, // greaterthan flag
     regs32: [i32; REGSIZE],
     regs64: [i64; REGSIZE],
     regs128: [i128; REGSIZE],
+    rem32: u32, // Remainder for DIV
+    rem64: u64,
+    rem128: u128,
     script: Bytes,
 }
 #[derive(Debug)]
@@ -29,7 +31,6 @@ enum RegLocal {
 impl From<u8> for RegLocal {
     fn from(v: u8) -> Self {
         let masked = v >> 6; // Top two bits decide which reg
-        println!("Val, Masked: {:?}, {:?}", v, masked);
         match masked {
             0 => RegLocal::REG32,
             1 => RegLocal::REG64,
@@ -43,7 +44,9 @@ impl VMScript {
     pub fn new(bytes: Bytes) -> VMScript {
         VMScript {
             pc: 0,
-            rem: 0,
+            rem32: 0,
+            rem64: 0,
+            rem128: 0,
             f_eq: false,
             f_lt: false,
             f_gt: false,
@@ -56,7 +59,9 @@ impl VMScript {
 
     pub fn reset(&mut self) {
         self.pc = 0;
-        self.rem = 0;
+        self.rem32 = 0;
+        self.rem64 = 0;
+        self.rem128 = 0;
         self.f_eq = false;
         self.f_lt = false;
         self.f_gt = false;
@@ -107,23 +112,90 @@ impl VMScript {
             }
             Opcode::ADD => {
                 let reg = self.next_bytes(1)[0];
+                let idx = (reg & 0x3F) as usize;
                 match RegLocal::from(reg) {
                     RegLocal::REG32 => {
-                        let idx = (reg & 0x3F) as usize;
                         self.regs32[idx] += self.read_u32() as i32;
                     }
                     RegLocal::REG64 => {
-                        let idx = (reg & 0x3F) as usize;
                         self.regs64[idx] += self.read_u64() as i64;
                     }
-                    RegLocal::REG128 => {}
+                    RegLocal::REG128 => {
+                        self.regs128[idx] += self.read_u128() as i128;
+                    }
                     _ => panic!("Failed to get register reference! {:?}", reg),
                 }
             }
-            Opcode::SUB => {}
-            Opcode::MUL => {}
-            Opcode::DIV => {}
-            Opcode::MOD => {}
+            Opcode::SUB => {
+                let reg = self.next_bytes(1)[0];
+                let idx = (reg & 0x3F) as usize;
+                match RegLocal::from(reg) {
+                    RegLocal::REG32 => {
+                        self.regs32[idx] -= self.read_u32() as i32;
+                    }
+                    RegLocal::REG64 => {
+                        self.regs64[idx] -= self.read_u64() as i64;
+                    }
+                    RegLocal::REG128 => {
+                        self.regs128[idx] -= self.read_u128() as i128;
+                    }
+                    _ => panic!("Failed to get register reference! {:?}", reg),
+                }
+            }
+            Opcode::MUL => {
+                let reg = self.next_bytes(1)[0];
+                let idx = (reg & 0x3F) as usize;
+                match RegLocal::from(reg) {
+                    RegLocal::REG32 => {
+                        self.regs32[idx] *= self.read_u32() as i32;
+                    }
+                    RegLocal::REG64 => {
+                        self.regs64[idx] *= self.read_u64() as i64;
+                    }
+                    RegLocal::REG128 => {
+                        self.regs128[idx] *= self.read_u128() as i128;
+                    }
+                    _ => panic!("Failed to get register reference! {:?}", reg),
+                }
+            }
+            Opcode::DIV => {
+                let reg = self.next_bytes(1)[0];
+                let idx = (reg & 0x3F) as usize;
+                match RegLocal::from(reg) {
+                    RegLocal::REG32 => {
+                        let val = self.read_u32() as i32;
+                        self.rem32 = (self.regs32[idx] % val) as u32;
+                        self.regs32[idx] /= val;
+                    }
+                    RegLocal::REG64 => {
+                        let val = self.read_u64() as i64;
+                        self.rem64 = (self.regs64[idx] % val) as u64;
+                        self.regs64[idx] /= val;
+                    }
+                    RegLocal::REG128 => {
+                        let val = self.read_u128() as i128;
+                        self.rem128 = (self.regs128[idx] % val) as u128;
+                        self.regs128[idx] /= val;
+                    }
+                    _ => panic!("Failed to get register reference! {:?}", reg),
+                }
+            }
+            Opcode::MOD => {
+                let reg = self.next_bytes(1)[0];
+                let idx = (reg & 0x3F) as usize;
+                match RegLocal::from(reg) {
+                    RegLocal::REG32 => {
+                        self.regs32[idx] %= self.read_u32() as i32;
+                    }
+                    RegLocal::REG64 => {
+                        self.regs64[idx] %= self.read_u64() as i64;
+                    }
+                    RegLocal::REG128 => {
+                        self.regs128[idx] %= self.read_u128() as i128;
+                    }
+                    _ => panic!("Failed to get register reference! {:?}", reg),
+                }
+            }
             Opcode::SHR => {}
             Opcode::SHL => {}
             Opcode::CAL => {}
@@ -266,6 +338,107 @@ mod tests {
     }
 
     #[test]
+    fn test_sub32() {
+        let reg: u8 = 0 + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0x0,
+                0x0,
+                0x0,
+                0x01,
+                Opcode::SUB as u8,
+                reg,
+                0,
+                0,
+                0,
+                100,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[1], 1 - 100);
+    }
+
+    #[test]
+    fn test_mul32() {
+        let reg: u8 = 0 + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0x0,
+                0x0,
+                0x0,
+                0x02,
+                Opcode::MUL as u8,
+                reg,
+                0,
+                0,
+                0,
+                100,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[1], 2 * 100);
+    }
+
+    #[test]
+    fn test_div32() {
+        let reg: u8 = 0 + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0x0,
+                0x0,
+                0x0,
+                100,
+                Opcode::DIV as u8,
+                reg,
+                0,
+                0,
+                0,
+                3,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[1], 100 / 3);
+        assert_eq!(test_vm.rem32, 100 % 3);
+    }
+
+     #[test]
+    fn test_mod32() {
+        let reg: u8 = 0 + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0x0,
+                0x0,
+                0x0,
+                100,
+                Opcode::MOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                3,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[1], 100 % 3);
+    }
+
+    #[test]
     fn test_add64() {
         let reg: u8 = (1 << 6) + 1;
         let script = Bytes::from(
@@ -296,6 +469,390 @@ mod tests {
         let mut test_vm = VMScript::new(script);
         test_vm.run();
         assert_eq!(test_vm.regs64[1], 1 + 100);
+    }
+
+    #[test]
+    fn test_sub64() {
+        let reg: u8 = (1 << 6) + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                Opcode::SUB as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                100,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs64[1], 1 - 100);
+    }
+
+    #[test]
+    fn test_mul64() {
+        let reg: u8 = (1 << 6) + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                2,
+                Opcode::MUL as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                100,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs64[1], 2 * 100);
+    }
+
+    #[test]
+    fn test_div64() {
+        let reg: u8 = (1 << 6) + 1;
+        let val1 = 100;
+        let val2 = 3;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                val1 as u8,
+                Opcode::DIV as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                val2 as u8,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs64[1], 100 / 3);
+        assert_eq!(test_vm.rem64, 100 % 3);
+    }
+
+
+    #[test]
+    fn test_mod64() {
+        let reg: u8 = (1 << 6) + 1;
+        let val1 = 100;
+        let val2 = 3;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                val1 as u8,
+                Opcode::MOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                val2 as u8,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs64[1], 100 % 3);
+    }
+
+    #[test]
+    fn test_add128() {
+        let reg: u8 = (1 << 7) + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                Opcode::ADD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                100,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs128[1], 1 + 100);
+    }
+
+    #[test]
+    fn test_sub128() {
+        let reg: u8 = (1 << 7) + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                Opcode::SUB as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                100,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs128[1], 1 - 100);
+    }
+
+    #[test]
+    fn test_mul128() {
+        let reg: u8 = (1 << 7) + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                2,
+                Opcode::MUL as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                100,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs128[1], 2 * 100);
+    }
+
+    #[test]
+    fn test_div128() {
+        let reg: u8 = (1 << 7) + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                100,
+                Opcode::DIV as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                3,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs128[1], 100 / 3);
+        assert_eq!(test_vm.rem128, 100 % 3);
+    }
+
+    #[test]
+    fn test_mod128() {
+        let reg: u8 = (1 << 7) + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                100,
+                Opcode::MOD as u8,
+                reg,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                3,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs128[1], 100 % 3);
     }
 
 }
