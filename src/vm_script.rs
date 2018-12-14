@@ -91,20 +91,18 @@ impl VMScript {
             Opcode::LOD => {
                 let reg = self.next_bytes(1)[0];
                 let r = RegLocal::from(reg);
+                let idx = (reg & 0x3F) as usize;
                 println!("LOD Reg: {:?}", r);
                 match r {
                     RegLocal::REG32 => {
-                        let idx = (reg & 0x3F) as usize;
                         let val = self.read_u32();
                         self.regs32[idx] = val as i32;
                     }
                     RegLocal::REG64 => {
-                        let idx = (reg & 0x3F) as usize;
                         let val = self.read_u64();
                         self.regs64[idx] = val as i64;
                     }
                     RegLocal::REG128 => {
-                        let idx = (reg & 0x3F) as usize;
                         let val = self.read_u128();
                         self.regs128[idx] = val as i128;
                     }
@@ -391,7 +389,7 @@ mod tests {
         assert_eq!(test_vm.regs64[1], 0xFFFFFFFFFFFFFFFF >> 3);
     }
 
-     #[test]
+    #[test]
     fn test_shl64() {
         let reg = (1 << 6) + 1;
         let script = Bytes::from(
@@ -482,7 +480,7 @@ mod tests {
         assert_eq!(test_vm.regs128[1], (-1 as i128) >> 3);
     }
 
-     #[test]
+    #[test]
     fn test_shl128() {
         let reg = (1 << 7) + 1;
         let script = Bytes::from(
@@ -660,6 +658,41 @@ mod tests {
         let mut test_vm = VMScript::new(script);
         test_vm.run();
         assert_eq!(test_vm.regs32[0], 100 % 3);
+    }
+
+    #[test]
+    fn test_many32() {
+        let reg1: u8 = 0;
+        let reg2: u8 = 0 + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg1,
+                0x0,
+                0x0,
+                0x0,
+                100,
+                Opcode::LOD as u8,
+                reg2,
+                0,
+                0,
+                0,
+                3,
+                Opcode::DIV as u8,
+                reg1,
+                reg2,
+                Opcode::MUL as u8,
+                reg1,
+                reg2,
+                Opcode::SUB as u8,
+                reg1,
+                reg2,
+                0,
+            ][..],
+        );
+        let mut test_vm = VMScript::new(script);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[0], (100 / 3) * 3 - 3);
     }
 
     #[test]
