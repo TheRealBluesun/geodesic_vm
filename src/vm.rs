@@ -12,12 +12,11 @@ impl VM {
     pub fn new(scripts: &[Bytes]) -> VM {
         VM {
             numscripts: scripts.len(),
-            regs: [0;100],
+            regs: [0; 100],
         }
     }
 
     pub fn run() -> bool {
-        
         false
     }
 }
