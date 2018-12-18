@@ -5,21 +5,24 @@ use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use self::bytes::{Buf, BufMut, Bytes, BytesMut};
 use instruction::Opcode;
 use std::mem::size_of;
+use vm::VM;
+use std::ptr;
 
 const REGSIZE: usize = 0xFF / 4;
 
-pub struct VMScript {
+pub struct VMScript<'a> {
+    vm_handle: &'a VM<'a>,
     pc: usize,  // Program Counter -- will be used as an index, could be u8 otherwise
     f_eq: bool, // is_equal flag
     f_lt: bool, // lessthan flag
     f_gt: bool, // greaterthan flag
-    regs32: [i32; REGSIZE],
+    pub regs32: [i32; REGSIZE],
     regs64: [i64; REGSIZE],
     regs128: [i128; REGSIZE],
     rem32: u32, // Remainder for DIV
     rem64: u64,
     rem128: u128,
-    script: Bytes,
+    script: &'a Bytes,
 }
 #[derive(Debug)]
 enum RegLocal {
@@ -40,9 +43,10 @@ impl From<u8> for RegLocal {
     }
 }
 
-impl VMScript {
-    pub fn new(bytes: Bytes) -> VMScript {
+impl<'a> VMScript<'a> {
+    pub fn new(bytes: &'a Bytes, vm: &'a VM<'a>) -> VMScript<'a> {
         VMScript {
+            vm_handle: vm,
             pc: 0,
             rem32: 0,
             rem64: 0,
@@ -56,6 +60,7 @@ impl VMScript {
             script: bytes,
         }
     }
+
 
     pub fn reset(&mut self) {
         self.pc = 0;
@@ -283,7 +288,11 @@ impl VMScript {
                     }
                 }
             }
-            Opcode::CAL => {}
+            Opcode::CAL => {
+                // We're going to pass off execution to another script
+
+
+            }
             _ => {
                 println!("Unknown opcode! {:?}", o);
                 return false;
@@ -330,7 +339,7 @@ impl VMScript {
         val
     }
 }
-
+/*
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
@@ -1203,3 +1212,4 @@ mod tests {
     }
 
 }
+*/

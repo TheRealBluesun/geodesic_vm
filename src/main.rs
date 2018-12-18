@@ -12,6 +12,6 @@ use vm_script::*;
 
 fn main() {
     let script = Bytes::from_static(&[2, 0, 0, 0, 0, 0xFF]);
-    let mut test_vm = VMScript::new(script);
-    test_vm.run();
+    // let mut test_vm = VMScript::new(script);
+    // test_vm.run();
 }
