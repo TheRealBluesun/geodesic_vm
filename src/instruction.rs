@@ -1,8 +1,3 @@
-extern crate byteorder;
-extern crate bytes;
-
-use self::byteorder::LittleEndian;
-use self::bytes::{Buf, BufMut, Bytes, BytesMut};
 
 #[derive(Debug, PartialEq)]
 pub enum Opcode {
@@ -17,6 +12,7 @@ pub enum Opcode {
     SHR,
     SHL,
     CAL,
+    CMP,
     ERR,
 }
 
@@ -34,19 +30,8 @@ impl From<u8> for Opcode {
             0x8 => Opcode::SHR,
             0x9 => Opcode::SHL,
             0xA => Opcode::CAL,
+            0xB => Opcode::CMP,
             _ => Opcode::ERR,
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // #[test]
-    // fn test_inst_create() {
-    // 	let program = Bytes::from(&b"Hello world"[..]);
-    // 	// let ins = Instruction::from(program);
-    // 	// assert_eq!(Bytes::from(&b"el"[..]), ins.data);
-    // }
 }

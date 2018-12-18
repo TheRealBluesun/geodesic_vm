@@ -123,7 +123,6 @@ impl VMScript {
                     RegLocal::REG128 => {
                         self.regs128[idx1] += self.regs128[idx2];
                     }
-                    _ => panic!("Failed to get register reference! {:?}", reg1),
                 }
             }
             Opcode::SUB => {
@@ -141,7 +140,6 @@ impl VMScript {
                     RegLocal::REG128 => {
                         self.regs128[idx1] -= self.regs128[idx2];
                     }
-                    _ => panic!("Failed to get register reference! {:?}", reg1),
                 }
             }
             Opcode::MUL => {
@@ -159,7 +157,6 @@ impl VMScript {
                     RegLocal::REG128 => {
                         self.regs128[idx1] *= self.regs128[idx2];
                     }
-                    _ => panic!("Failed to get register reference! {:?}", reg1),
                 }
             }
             Opcode::DIV => {
@@ -180,7 +177,6 @@ impl VMScript {
                         self.rem128 = (self.regs128[idx1] % self.regs128[idx2]) as u128;
                         self.regs128[idx1] /= self.regs128[idx2];
                     }
-                    _ => panic!("Failed to get register reference! {:?}", reg1),
                 }
             }
             Opcode::MOD => {
@@ -198,7 +194,6 @@ impl VMScript {
                     RegLocal::REG128 => {
                         self.regs128[idx1] %= self.regs128[idx2];
                     }
-                    _ => panic!("Failed to get register reference! {:?}", reg1),
                 }
             }
             Opcode::SHR => {
@@ -215,7 +210,6 @@ impl VMScript {
                     RegLocal::REG128 => {
                         self.regs128[idx] >>= shft;
                     }
-                    _ => panic!("Failed to get register reference! {:?}", reg),
                 }
             }
             Opcode::SHL => {
@@ -232,7 +226,61 @@ impl VMScript {
                     RegLocal::REG128 => {
                         self.regs128[idx] <<= shft;
                     }
-                    _ => panic!("Failed to get register reference! {:?}", reg),
+                }
+            }
+            Opcode::CMP => {
+                let reg1 = self.next_bytes(1)[0];
+                let reg2 = self.next_bytes(1)[0];
+                let idx1 = (reg1 & 0x3F) as usize;
+                let idx2 = (reg2 & 0x3F) as usize;
+                match RegLocal::from(reg1) {
+                    RegLocal::REG32 => {
+                        // Intentionally not done with three statements
+                        // to minimize effective operations
+                        if self.regs32[idx1] == self.regs32[idx2] {
+                            self.f_eq = true;
+                            self.f_gt = false;
+                            self.f_lt = false;
+                        } else if self.regs32[idx1] > self.regs32[idx2] {
+                            self.f_eq = false;
+                            self.f_gt = true;
+                            self.f_lt = false;
+                        } else if self.regs32[idx1] < self.regs32[idx2] {
+                            self.f_eq = false;
+                            self.f_gt = false;
+                            self.f_lt = true;
+                        }
+                    }
+                    RegLocal::REG64 => {
+                        if self.regs64[idx1] == self.regs64[idx2] {
+                            self.f_eq = true;
+                            self.f_gt = false;
+                            self.f_lt = false;
+                        } else if self.regs64[idx1] > self.regs64[idx2] {
+                            self.f_eq = false;
+                            self.f_gt = true;
+                            self.f_lt = false;
+                        } else if self.regs64[idx1] < self.regs64[idx2] {
+                            self.f_eq = false;
+                            self.f_gt = false;
+                            self.f_lt = true;
+                        }
+                    }
+                    RegLocal::REG128 => {
+                        if self.regs128[idx1] == self.regs128[idx2] {
+                            self.f_eq = true;
+                            self.f_gt = false;
+                            self.f_lt = false;
+                        } else if self.regs128[idx1] > self.regs128[idx2] {
+                            self.f_eq = false;
+                            self.f_gt = true;
+                            self.f_lt = false;
+                        } else if self.regs128[idx1] < self.regs128[idx2] {
+                            self.f_eq = false;
+                            self.f_gt = false;
+                            self.f_lt = true;
+                        }
+                    }
                 }
             }
             Opcode::CAL => {}
@@ -285,6 +333,9 @@ impl VMScript {
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_imports)]
+    #![allow(unused_parens)]
+    #![allow(overflowing_literals)]
     use super::*;
 
     #[test]

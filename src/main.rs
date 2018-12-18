@@ -1,8 +1,11 @@
+#[macro_use]
+extern crate nom;
+extern crate bytes;
+
 pub mod instruction;
 pub mod vm;
 pub mod vm_script;
-
-extern crate bytes;
+pub mod asm;
 
 use self::bytes::{Buf, BufMut, Bytes, BytesMut};
 use vm_script::*;

@@ -6,3 +6,4 @@ authors = ["Harry <hlbarber93@gmail.com>", "Chris Novick <c.r.novick@protonmail.
 [dependencies]
 bytes = "0.4.11"
 byteorder = "1.2.7"
+nom = "4.1.1" 
