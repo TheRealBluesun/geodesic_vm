@@ -2,16 +2,22 @@
 extern crate nom;
 extern crate bytes;
 
+pub mod asm;
 pub mod instruction;
 pub mod vm;
 pub mod vm_script;
-pub mod asm;
 
 use self::bytes::{Buf, BufMut, Bytes, BytesMut};
 use vm_script::*;
+use instruction::Opcode;
+use vm::VM;
 
 fn main() {
-    let script = Bytes::from_static(&[2, 0, 0, 0, 0, 0xFF]);
-    // let mut test_vm = VMScript::new(script);
-    // test_vm.run();
+    let reg = 0;
+    let script = &[
+        Bytes::from(&[0xA, 0x0, 0][..]),
+        Bytes::from(&[Opcode::LOD as u8, reg, 0xFF, 0xFF, 0xFF, 0xFF, 0][..]),
+    ];
+    let mut test_vm = VM::new(script);
+    test_vm.run();
 }
