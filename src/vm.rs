@@ -1,23 +1,19 @@
 extern crate bytes;
 
-use self::bytes::{Buf, BufMut, Bytes, BytesMut};
+use self::bytes::{Bytes};
 use vm_script::VMScript;
 
 //#[derive(Debug)]
 pub struct VM<'a> {
-    numscripts: usize,
     pub regs: [i32; 100],
-    retval: i32,
     scripts: &'a [Bytes],
 }
 
 impl<'a> VM<'a> {
     pub fn new(scripts: &'a [Bytes]) -> VM {
         VM {
-            numscripts: scripts.len(),
             regs: [0; 100],
-            scripts: scripts,
-            retval: 0,
+            scripts,
         }
     }
 

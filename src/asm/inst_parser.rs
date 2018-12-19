@@ -27,14 +27,14 @@ impl AsmInstruction {
             }
         };
 
-        for operand in vec![&self.operand1, &self.operand2, &self.operand3] {
+        for operand in &[&self.operand1, &self.operand2, &self.operand3] {
             match operand {
                 Some(t) => AsmInstruction::extract_operand(t, &mut results),
                 None => {}
             }
         }
 
-        return results;
+        results
     }
 
     fn extract_operand(t: &Token, results: &mut Vec<u8>) {

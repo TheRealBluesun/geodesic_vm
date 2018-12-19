@@ -21,7 +21,6 @@ named!(pub script<CompleteStr, Script>,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asm::Opcode;
 
     #[test]
     fn test_parse_program() {

@@ -1,12 +1,10 @@
 extern crate byteorder;
 extern crate bytes;
 
-use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use self::bytes::{Buf, BufMut, Bytes, BytesMut};
+//use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use self::bytes::{Bytes};
 use instruction::Opcode;
 use std::mem::size_of;
-use std::ptr;
-use vm::VM;
 
 const REGSIZE: usize = 0xFF / 4;
 
@@ -59,7 +57,7 @@ impl<'a> VMScript<'a> {
             regs64: [0; REGSIZE],
             regs128: [0; REGSIZE],
             script: &libs[0],
-            libs: libs,
+            libs,
         }
     }
 

@@ -7,8 +7,7 @@ pub mod instruction;
 pub mod vm;
 pub mod vm_script;
 
-use self::bytes::{Buf, BufMut, Bytes, BytesMut};
-use vm_script::*;
+use self::bytes::{Bytes};
 use instruction::Opcode;
 use vm::VM;
 
