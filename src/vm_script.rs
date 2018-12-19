@@ -75,12 +75,12 @@ impl<'a> VMScript<'a> {
         self.regs128 = [0; REGSIZE];
     }
 
-    pub fn run(&mut self) -> bool {
+    pub fn run(&mut self) -> i32 {
         let mut finished = false;
         while !finished {
             finished = !self.step();
         }
-        true
+        self.regs32[0]
     }
 
     // Expected return value is "shuld we keep running"
