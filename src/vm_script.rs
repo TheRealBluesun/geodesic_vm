@@ -23,7 +23,7 @@ pub struct VMScript<'a> {
     rem64: u64,
     rem128: u128,
     script: &'a Bytes,
-    libs: Option<&'a [Bytes]>,
+    libs: &'a [Bytes],
 }
 #[derive(Debug)]
 enum RegLocal {
@@ -46,7 +46,7 @@ impl From<u8> for RegLocal {
 
 impl<'a> VMScript<'a> {
     //    pub fn new(bytes: &'a Bytes, vm: &'a mut VM<'a>) -> VMScript<'a> {
-    pub fn new(bytes: &'a Bytes, libs: Option<&'a [Bytes]>) -> VMScript<'a> {
+    pub fn new(libs: &'a [Bytes]) -> VMScript<'a> {
         VMScript {
             pc: 0,
             rem32: 0,
@@ -58,7 +58,7 @@ impl<'a> VMScript<'a> {
             regs32: [0; REGSIZE],
             regs64: [0; REGSIZE],
             regs128: [0; REGSIZE],
-            script: bytes,
+            script: &libs[0],
             libs: libs,
         }
     }
@@ -294,19 +294,13 @@ impl<'a> VMScript<'a> {
                 // Get the index as the next param
 
                 // Call that script if it exists
-                match self.libs {
-                    Some(libs) => {
-                        let idx = (self.next_bytes(1)[0] + 1)as usize;
-                        if idx > libs.len() -1 {
-                            panic!("Cannot call lib with index {}, out of bounds!", idx-1);
-                        }
-                        let mut cal_script = VMScript::new(&libs[idx], Some(libs));
-                        self.regs32[0] = cal_script.run();
-                    }
-                    None => {
-                        panic!("Attempted to call empty libs!");
-                    }
+
+                let idx = (self.next_bytes(1)[0] + 1) as usize;
+                if idx > self.libs.len() - 1 {
+                    panic!("Cannot call lib with index {}, out of bounds!", idx - 1);
                 }
+                let mut cal_script = VMScript::new(&self.libs[idx..]);
+                self.regs32[0] = cal_script.run();
             }
             _ => {
                 println!("Unknown opcode! {:?}", o);
@@ -361,16 +355,17 @@ mod tests {
     #![allow(unused_parens)]
     #![allow(overflowing_literals)]
     use super::*;
-
+    //    /*
     #[test]
     fn test_lod32() {
         let reg = 0 + 1;
         let script = Bytes::from(&[Opcode::LOD as u8, reg, 0xFF, 0xFF, 0xFF, 0xFF, 0][..]);
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs32[1], -1);
     }
-
+    ///*
     #[test]
     fn test_shr32() {
         let reg = 0 + 1;
@@ -388,7 +383,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs32[1], 0xFFFFFFFF >> 3);
     }
@@ -410,7 +406,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs32[1], 0xFFFFFFFF << 3);
     }
@@ -433,7 +430,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs64[1], -1);
     }
@@ -459,7 +457,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs64[1], 0xFFFFFFFFFFFFFFFF >> 3);
     }
@@ -485,7 +484,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs64[1], 0xFFFFFFFFFFFFFFFF << 3);
     }
@@ -516,7 +516,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs128[1], -1);
     }
@@ -550,7 +551,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs128[1], (-1 as i128) >> 3);
     }
@@ -584,7 +586,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs128[1], (-1 as i128) << 3);
     }
@@ -613,7 +616,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs32[0], 1 + 100);
     }
@@ -642,7 +646,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs32[0], 1 - 100);
     }
@@ -671,7 +676,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs32[0], 2 * 100);
     }
@@ -700,7 +706,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs32[0], 100 / 3);
         assert_eq!(test_vm.rem32, 100 % 3);
@@ -730,7 +737,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs32[0], 100 % 3);
     }
@@ -765,7 +773,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs32[0], (100 / 3) * 3 - 3);
     }
@@ -802,7 +811,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs64[0], 1 + 100);
     }
@@ -839,7 +849,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs64[0], 1 - 100);
     }
@@ -876,7 +887,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs64[0], 2 * 100);
     }
@@ -915,7 +927,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs64[0], 100 / 3);
         assert_eq!(test_vm.rem64, 100 % 3);
@@ -955,7 +968,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs64[0], 100 % 3);
     }
@@ -1008,7 +1022,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 1 + 100);
     }
@@ -1061,7 +1076,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 1 - 100);
     }
@@ -1114,7 +1130,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 2 * 100);
     }
@@ -1167,7 +1184,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 100 / 3);
         assert_eq!(test_vm.rem128, 100 % 3);
@@ -1221,7 +1239,8 @@ mod tests {
                 0,
             ][..],
         );
-        let mut test_vm = VMScript::new(&script, None);
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 100 % 3);
     }

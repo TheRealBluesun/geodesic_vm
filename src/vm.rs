@@ -22,7 +22,7 @@ impl<'a> VM<'a> {
     }
 
     pub fn run(&mut self) -> bool {
-        let mut vm_scr = VMScript::new(&self.scripts[0], Some(self.scripts));
+        let mut vm_scr = VMScript::new(self.scripts);
         self.regs[0] = vm_scr.run();
         true
     }
