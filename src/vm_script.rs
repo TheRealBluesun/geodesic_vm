@@ -297,6 +297,9 @@ impl<'a> VMScript<'a> {
                 match self.libs {
                     Some(libs) => {
                         let idx = (self.next_bytes(1)[0] + 1)as usize;
+                        if idx > libs.len() -1 {
+                            panic!("Cannot call lib with index {}, out of bounds!", idx-1);
+                        }
                         let mut cal_script = VMScript::new(&libs[idx], Some(libs));
                         self.regs32[0] = cal_script.run();
                     }
