@@ -2,7 +2,7 @@ extern crate byteorder;
 extern crate bytes;
 
 //use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use self::bytes::{Bytes, BytesMut};
+use self::bytes::{BufMut, Bytes, BytesMut};
 use instruction::Opcode;
 use std::mem::size_of;
 
@@ -393,7 +393,8 @@ impl<'a> VMScript<'a> {
                     RegLocal::REG32 => {
                         let sz = size_of::<u32>();
                         for i in 0..sz - 1 {
-                            self.heap[self.sp + i] = (self.regs32[idx] >> i) as u8;
+                            println!("Size of heap is {}", self.heap.len());
+                            self.heap.put((self.regs32[idx] >> i) as u8);
                         }
                         self.sp += sz;
                     }
@@ -405,7 +406,25 @@ impl<'a> VMScript<'a> {
                     }
                 }
             }
-            Opcode::POP => {}
+            Opcode::POP => {
+                let reg = self.next_bytes(1)[0];
+                let idx = (reg & 0x3F) as usize;
+                match RegLocal::from(reg) {
+                    RegLocal::REG32 => {
+                        let sz = size_of::<u32>();
+                        let (self.heap,heap_val) = self.heap.split_at(self.sp-sz );
+                        for i in 0..sz - 1 {
+                            self.regs32[idx] += heap_val[i] << i;
+                        }
+                    }
+                    RegLocal::REG64 => {
+                        // self.regs64[idx1] ^= self.regs64[idx2];
+                    }
+                    RegLocal::REG128 => {
+                        // self.regs128[idx1] ^= self.regs128[idx2];
+                    }
+                }
+            }
             _ => {
                 println!("Unknown opcode! {:?}", o);
                 return false;
