@@ -21,7 +21,7 @@ pub struct VMScript<'a> {
     rem64: u64,
     rem128: u128,
     script: &'a Bytes,
-    scriptRet: i32, // register to hold this script's retval
+    script_ret: i32, // register to hold this script's retval
     libs: &'a [Bytes],
 }
 #[derive(Debug)]
@@ -58,7 +58,7 @@ impl<'a> VMScript<'a> {
             regs64: [0; REGSIZE],
             regs128: [0; REGSIZE],
             script: &libs[0],
-            scriptRet: 0,
+            script_ret: 0,
             libs,
         }
     }
@@ -81,7 +81,7 @@ impl<'a> VMScript<'a> {
         while !finished {
             finished = !self.step();
         }
-        self.scriptRet
+        self.script_ret
     }
 
     // Expected return value is "shuld we keep running"
@@ -365,22 +365,16 @@ impl<'a> VMScript<'a> {
                     panic!("Cannot call lib with index {}, out of bounds!", idx - 1);
                 }
                 let mut cal_script = VMScript::new(&self.libs[idx..]);
-                self.scriptRet = cal_script.run();
+                self.script_ret = cal_script.run();
             }
             Opcode::RET => {
                 let reg = self.next_bytes(1)[0];
                 let idx = (reg & 0x3F) as usize;
                 // @TODO -- do we want retvals of each type?
-                self.scriptRet = match RegLocal::from(reg) {
-                    RegLocal::REG32 => {
-                        self.regs32[idx]
-                    }
-                    RegLocal::REG64 => {
-                        self.regs64[idx] as i32
-                    }
-                    RegLocal::REG128 => {
-                        self.regs128[idx] as i32
-                    }
+                self.script_ret = match RegLocal::from(reg) {
+                    RegLocal::REG32 => self.regs32[idx],
+                    RegLocal::REG64 => self.regs64[idx] as i32,
+                    RegLocal::REG128 => self.regs128[idx] as i32,
                 }
             }
             _ => {

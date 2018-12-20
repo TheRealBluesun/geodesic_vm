@@ -25,6 +25,7 @@ impl<'a> VM<'a> {
 mod tests {
     use super::*;
     use instruction::Opcode;
+
     #[test]
     fn test_vm_cal() {
         let reg = 0;
@@ -35,7 +36,9 @@ mod tests {
             Bytes::from(&[Opcode::LOD as u8, reg, 0x0, 0x0, 0x0, 0xFF, Opcode::RET as u8, reg, 0][..]),
         ];
         let mut test_vm = VM::new(script);
-        let retVal = test_vm.run();
-        assert_eq!(retVal, 0xFF);
+        let ret = test_vm.run();
+        assert_eq!(ret, 0xFF);
     }
+
+   
 }
