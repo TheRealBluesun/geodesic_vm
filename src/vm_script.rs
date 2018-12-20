@@ -389,9 +389,13 @@ impl<'a> VMScript<'a> {
             Opcode::PSH => {
                 let reg = self.next_bytes(1)[0];
                 let idx = (reg & 0x3F) as usize;
-                 match RegLocal::from(reg) {
+                match RegLocal::from(reg) {
                     RegLocal::REG32 => {
-                        self.heap_write_u32(self.regs32[idx] as u32);
+                        let sz = size_of::<u32>();
+                        for i in 0..sz - 1 {
+                            self.heap[self.sp + i] = (self.regs32[idx] >> i) as u8;
+                        }
+                        self.sp += sz;
                     }
                     RegLocal::REG64 => {
                         // self.regs64[idx1] ^= self.regs64[idx2];
@@ -400,7 +404,6 @@ impl<'a> VMScript<'a> {
                         // self.regs128[idx1] ^= self.regs128[idx2];
                     }
                 }
-                
             }
             Opcode::POP => {}
             _ => {
@@ -437,15 +440,6 @@ impl<'a> VMScript<'a> {
             val += (u32::from(*v)) << ((sz - 1 - i) * 8);
         }
         val
-    }
-
-    fn heap_write_u32(&mut self, val: u32) -> bool {
-        let sz = size_of::<u32>();
-        for i in 0..sz - 1 {
-            self.heap[self.sp + i] = (val >> i) as u8;
-        }
-        self.sp += sz;
-        true
     }
 
     fn read_u64(&mut self) -> u64 {
@@ -490,7 +484,10 @@ mod tests {
                 Opcode::PSH as u8,
                 reg,
                 Opcode::LOD as u8,
-                0,0,0,0,
+                0,
+                0,
+                0,
+                0,
                 Opcode::POP as u8,
                 reg,
                 0,
