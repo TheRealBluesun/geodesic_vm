@@ -1,5 +1,5 @@
-#![feature(test)]
-extern crate test;
+// #![feature(test)]
+// extern crate test;
 #[macro_use]
 extern crate nom;
 extern crate bytes;
@@ -26,7 +26,7 @@ fn main() {
                 0xFF,
                 0xFF,
                 0xFF,
-                Opcode::RET as u8,
+                Opcode::PSH as u8,
                 reg,
                 0,
             ][..],
@@ -39,7 +39,7 @@ fn main() {
                 0x0,
                 0x0,
                 0xFF,
-                Opcode::RET as u8,
+                Opcode::PSH as u8,
                 reg,
                 0,
             ][..],
@@ -47,13 +47,14 @@ fn main() {
     ];
     let mut test_vm = VM::new(script);
     let ret = test_vm.run();
-    assert_eq!(ret, 0xFF);
+    assert_eq!(ret, true);
 }
 
 #[cfg(test)]
 
 mod tests {
     use super::*;
+    /*
     use test::Bencher;
 
     #[bench]
@@ -119,4 +120,5 @@ mod tests {
 
         b.iter(|| test_vm.run())
     }
+    // */
 }

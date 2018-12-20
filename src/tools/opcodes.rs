@@ -2,6 +2,7 @@ pub enum Opcode{
 	HLT,
 	NOP,
 	LOD,
+	INC,
 	ADD,
 	SUB,
 	MUL,
@@ -15,7 +16,8 @@ pub enum Opcode{
 	XOR,
 	CAL,
 	CMP,
-	RET,
+	PSH,
+	POP,
 	ERR,
 }
 
@@ -25,20 +27,22 @@ impl From<u8> for Opcode {
 			0x0 => Opcode::HLT,
 			0x1 => Opcode::NOP,
 			0x2 => Opcode::LOD,
-			0x3 => Opcode::ADD,
-			0x4 => Opcode::SUB,
-			0x5 => Opcode::MUL,
-			0x6 => Opcode::DIV,
-			0x7 => Opcode::MOD,
-			0x8 => Opcode::SHR,
-			0x9 => Opcode::SHL,
-			0xA => Opcode::AND,
-			0xB => Opcode::OR,
-			0xC => Opcode::NOT,
-			0xD => Opcode::XOR,
-			0xE => Opcode::CAL,
-			0xF => Opcode::CMP,
-			0x10 => Opcode::RET,
+			0x3 => Opcode::INC,
+			0x4 => Opcode::ADD,
+			0x5 => Opcode::SUB,
+			0x6 => Opcode::MUL,
+			0x7 => Opcode::DIV,
+			0x8 => Opcode::MOD,
+			0x9 => Opcode::SHR,
+			0xA => Opcode::SHL,
+			0xB => Opcode::AND,
+			0xC => Opcode::OR,
+			0xD => Opcode::NOT,
+			0xE => Opcode::XOR,
+			0xF => Opcode::CAL,
+			0x10 => Opcode::CMP,
+			0x11 => Opcode::PSH,
+			0x12 => Opcode::POP,
 			_=> Opcode::ERR
 		}
 	}
@@ -47,6 +51,7 @@ impl From<u8> for Opcode {
 Opcode::HLT => {}
 Opcode::NOP => {}
 Opcode::LOD => {}
+Opcode::INC => {}
 Opcode::ADD => {}
 Opcode::SUB => {}
 Opcode::MUL => {}
@@ -60,4 +65,5 @@ Opcode::NOT => {}
 Opcode::XOR => {}
 Opcode::CAL => {}
 Opcode::CMP => {}
-Opcode::RET => {}
+Opcode::PSH => {}
+Opcode::POP => {}

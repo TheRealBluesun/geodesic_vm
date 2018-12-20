@@ -2,7 +2,7 @@ extern crate byteorder;
 extern crate bytes;
 
 //use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use self::bytes::Bytes;
+use self::bytes::{Bytes, BytesMut};
 use instruction::Opcode;
 use std::mem::size_of;
 
@@ -11,6 +11,7 @@ const REGSIZE: usize = 0xFF / 4;
 pub struct VMScript<'a> {
     //vm_handle: &'a VM<'a>,
     pc: usize,  // Program Counter -- will be used as an index, could be u8 otherwise
+    sp: usize,  // Stack Pointer -- although used for the 'heap'
     f_eq: bool, // is_equal flag
     f_lt: bool, // lessthan flag
     f_gt: bool, // greaterthan flag
@@ -21,8 +22,8 @@ pub struct VMScript<'a> {
     rem64: u64,
     rem128: u128,
     script: &'a Bytes,
-    script_ret: i32, // register to hold this script's retval
     libs: &'a [Bytes],
+    heap: &'a mut BytesMut,
 }
 #[derive(Debug)]
 enum RegLocal {
@@ -45,9 +46,10 @@ impl From<u8> for RegLocal {
 
 impl<'a> VMScript<'a> {
     //    pub fn new(bytes: &'a Bytes, vm: &'a mut VM<'a>) -> VMScript<'a> {
-    pub fn new(libs: &'a [Bytes]) -> VMScript<'a> {
+    pub fn new(libs: &'a [Bytes], heap: &'a mut BytesMut) -> VMScript<'a> {
         VMScript {
             pc: 0,
+            sp: 0,
             rem32: 0,
             rem64: 0,
             rem128: 0,
@@ -58,13 +60,15 @@ impl<'a> VMScript<'a> {
             regs64: [0; REGSIZE],
             regs128: [0; REGSIZE],
             script: &libs[0],
-            script_ret: 0,
             libs,
+            heap,
         }
     }
 
     pub fn reset(&mut self) {
         self.pc = 0;
+        self.sp = 0;
+        //self.heap = vec![];  // TODO -- clear the heap?
         self.rem32 = 0;
         self.rem64 = 0;
         self.rem128 = 0;
@@ -76,12 +80,12 @@ impl<'a> VMScript<'a> {
         self.regs128 = [0; REGSIZE];
     }
 
-    pub fn run(&mut self) -> i32 {
+    pub fn run(&mut self) -> bool {
         let mut finished = false;
         while !finished {
             finished = !self.step();
         }
-        self.script_ret
+        true
     }
 
     // Expected return value is "shuld we keep running"
@@ -111,6 +115,21 @@ impl<'a> VMScript<'a> {
                     RegLocal::REG128 => {
                         let val = self.read_u128();
                         self.regs128[idx] = val as i128;
+                    }
+                }
+            }
+            Opcode::INC => {
+                let reg = self.next_bytes(1)[0];
+                let idx = (reg & 0x3F) as usize;
+                match RegLocal::from(reg) {
+                    RegLocal::REG32 => {
+                        self.regs32[idx] += 1;
+                    }
+                    RegLocal::REG64 => {
+                        self.regs64[idx] += 1;
+                    }
+                    RegLocal::REG128 => {
+                        self.regs128[idx] += 1;
                     }
                 }
             }
@@ -364,19 +383,26 @@ impl<'a> VMScript<'a> {
                 if idx > self.libs.len() - 1 {
                     panic!("Cannot call lib with index {}, out of bounds!", idx - 1);
                 }
-                let mut cal_script = VMScript::new(&self.libs[idx..]);
-                self.script_ret = cal_script.run();
+                let mut cal_script = VMScript::new(&self.libs[idx..], self.heap);
+                return cal_script.run();
             }
-            Opcode::RET => {
+            Opcode::PSH => {
                 let reg = self.next_bytes(1)[0];
                 let idx = (reg & 0x3F) as usize;
-                // @TODO -- do we want retvals of each type?
-                self.script_ret = match RegLocal::from(reg) {
-                    RegLocal::REG32 => self.regs32[idx],
-                    RegLocal::REG64 => self.regs64[idx] as i32,
-                    RegLocal::REG128 => self.regs128[idx] as i32,
+                 match RegLocal::from(reg) {
+                    RegLocal::REG32 => {
+                        self.heap_write_u32(self.regs32[idx] as u32);
+                    }
+                    RegLocal::REG64 => {
+                        // self.regs64[idx1] ^= self.regs64[idx2];
+                    }
+                    RegLocal::REG128 => {
+                        // self.regs128[idx1] ^= self.regs128[idx2];
+                    }
                 }
+                
             }
+            Opcode::POP => {}
             _ => {
                 println!("Unknown opcode! {:?}", o);
                 return false;
@@ -401,6 +427,25 @@ impl<'a> VMScript<'a> {
             val += (u32::from(*v)) << ((sz - 1 - i) * 8);
         }
         val
+    }
+
+    fn heap_read_u32(&mut self) -> u32 {
+        let sz = size_of::<u32>();
+        let b = &self.heap[self.sp - sz..self.sp];
+        let mut val = u32::from(b[sz - 1]);
+        for (i, v) in b.iter().enumerate().take(sz - 1) {
+            val += (u32::from(*v)) << ((sz - 1 - i) * 8);
+        }
+        val
+    }
+
+    fn heap_write_u32(&mut self, val: u32) -> bool {
+        let sz = size_of::<u32>();
+        for i in 0..sz - 1 {
+            self.heap[self.sp + i] = (val >> i) as u8;
+        }
+        self.sp += sz;
+        true
     }
 
     fn read_u64(&mut self) -> u64 {
@@ -430,17 +475,45 @@ mod tests {
     #![allow(unused_parens)]
     #![allow(overflowing_literals)]
     use super::*;
-    //    /*
+
+    #[test]
+    fn test_heap_32() {
+        let reg = 0;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg,
+                0xFF,
+                0xFF,
+                0xFF,
+                0xFF,
+                Opcode::PSH as u8,
+                reg,
+                Opcode::LOD as u8,
+                0,0,0,0,
+                Opcode::POP as u8,
+                reg,
+                0,
+            ][..],
+        );
+        let script_arr = [script];
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[0], -1);
+    }
+
     #[test]
     fn test_lod32() {
         let reg = 0 + 1;
         let script = Bytes::from(&[Opcode::LOD as u8, reg, 0xFF, 0xFF, 0xFF, 0xFF, 0][..]);
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[1], -1);
     }
-    ///*
+
     #[test]
     fn test_shr32() {
         let reg = 0 + 1;
@@ -459,7 +532,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[1], 0xFFFFFFFF >> 3);
     }
@@ -482,7 +556,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[1], 0xFFFFFFFF << 3);
     }
@@ -506,7 +581,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs64[1], -1);
     }
@@ -533,7 +609,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs64[1], 0xFFFFFFFFFFFFFFFF >> 3);
     }
@@ -560,7 +637,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs64[1], 0xFFFFFFFFFFFFFFFF << 3);
     }
@@ -592,7 +670,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs128[1], -1);
     }
@@ -627,7 +706,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs128[1], (-1 as i128) >> 3);
     }
@@ -662,7 +742,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs128[1], (-1 as i128) << 3);
     }
@@ -692,7 +773,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], 1 + 100);
     }
@@ -722,7 +804,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], 1 - 100);
     }
@@ -752,7 +835,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], 2 * 100);
     }
@@ -782,7 +866,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], 100 / 3);
         assert_eq!(test_vm.rem32, 100 % 3);
@@ -813,7 +898,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], 100 % 3);
     }
@@ -843,7 +929,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], 100 & 3);
     }
@@ -873,7 +960,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], 100 | 3);
     }
@@ -903,7 +991,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], 100 ^ 3);
     }
@@ -925,7 +1014,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], !100);
     }
@@ -961,7 +1051,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs32[reg1 as usize], (100 / 3) * 3 - 3);
     }
@@ -999,7 +1090,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs64[(reg1 & 0x3F) as usize], 1 + 100);
     }
@@ -1037,7 +1129,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs64[0], 1 - 100);
     }
@@ -1075,7 +1168,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs64[(reg1 & 0x3F) as usize], 2 * 100);
     }
@@ -1115,7 +1209,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs64[(reg1 & 0x3F) as usize], 100 / 3);
         assert_eq!(test_vm.rem64, 100 % 3);
@@ -1156,7 +1251,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs64[(reg1 & 0x3F) as usize], 100 % 3);
     }
@@ -1210,7 +1306,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 1 + 100);
     }
@@ -1264,7 +1361,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 1 - 100);
     }
@@ -1318,7 +1416,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 2 * 100);
     }
@@ -1372,7 +1471,8 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 100 / 3);
         assert_eq!(test_vm.rem128, 100 % 3);
@@ -1427,10 +1527,10 @@ mod tests {
             ][..],
         );
         let script_arr = [script];
-        let mut test_vm = VMScript::new(&script_arr);
+        let mut heap = BytesMut::with_capacity(0xFF);
+        let mut test_vm = VMScript::new(&script_arr, &mut heap);
         test_vm.run();
         assert_eq!(test_vm.regs128[0], 100 % 3);
     }
 
-    // */
 }
