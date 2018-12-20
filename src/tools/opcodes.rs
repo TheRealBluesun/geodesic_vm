@@ -9,8 +9,13 @@ pub enum Opcode{
 	MOD,
 	SHR,
 	SHL,
+	AND,
+	OR,
+	NOT,
+	XOR,
 	CAL,
 	CMP,
+	RET,
 	ERR,
 }
 
@@ -27,8 +32,13 @@ impl From<u8> for Opcode {
 			0x7 => Opcode::MOD,
 			0x8 => Opcode::SHR,
 			0x9 => Opcode::SHL,
-			0xA => Opcode::CAL,
-			0xB => Opcode::CMP,
+			0xA => Opcode::AND,
+			0xB => Opcode::OR,
+			0xC => Opcode::NOT,
+			0xD => Opcode::XOR,
+			0xE => Opcode::CAL,
+			0xF => Opcode::CMP,
+			0x10 => Opcode::RET,
 			_=> Opcode::ERR
 		}
 	}
@@ -44,5 +54,10 @@ Opcode::DIV => {}
 Opcode::MOD => {}
 Opcode::SHR => {}
 Opcode::SHL => {}
+Opcode::AND => {}
+Opcode::OR => {}
+Opcode::NOT => {}
+Opcode::XOR => {}
 Opcode::CAL => {}
 Opcode::CMP => {}
+Opcode::RET => {}

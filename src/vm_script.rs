@@ -2,7 +2,7 @@ extern crate byteorder;
 extern crate bytes;
 
 //use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use self::bytes::{Bytes};
+use self::bytes::Bytes;
 use instruction::Opcode;
 use std::mem::size_of;
 
@@ -14,13 +14,14 @@ pub struct VMScript<'a> {
     f_eq: bool, // is_equal flag
     f_lt: bool, // lessthan flag
     f_gt: bool, // greaterthan flag
-    pub regs32: [i32; REGSIZE],
+    regs32: [i32; REGSIZE],
     regs64: [i64; REGSIZE],
     regs128: [i128; REGSIZE],
     rem32: u32, // Remainder for DIV
     rem64: u64,
     rem128: u128,
     script: &'a Bytes,
+    scriptRet: i32, // register to hold this script's retval
     libs: &'a [Bytes],
 }
 #[derive(Debug)]
@@ -57,6 +58,7 @@ impl<'a> VMScript<'a> {
             regs64: [0; REGSIZE],
             regs128: [0; REGSIZE],
             script: &libs[0],
+            scriptRet: 0,
             libs,
         }
     }
@@ -79,7 +81,7 @@ impl<'a> VMScript<'a> {
         while !finished {
             finished = !self.step();
         }
-        self.regs32[0]
+        self.scriptRet
     }
 
     // Expected return value is "shuld we keep running"
@@ -287,18 +289,99 @@ impl<'a> VMScript<'a> {
                     }
                 }
             }
+            Opcode::AND => {
+                let reg1 = self.next_bytes(1)[0];
+                let reg2 = self.next_bytes(1)[0];
+                let idx1 = (reg1 & 0x3F) as usize;
+                let idx2 = (reg2 & 0x3F) as usize;
+                match RegLocal::from(reg1) {
+                    RegLocal::REG32 => {
+                        self.regs32[idx1] &= self.regs32[idx2];
+                    }
+                    RegLocal::REG64 => {
+                        self.regs64[idx1] &= self.regs64[idx2];
+                    }
+                    RegLocal::REG128 => {
+                        self.regs128[idx1] &= self.regs128[idx2];
+                    }
+                }
+            }
+            Opcode::OR => {
+                let reg1 = self.next_bytes(1)[0];
+                let reg2 = self.next_bytes(1)[0];
+                let idx1 = (reg1 & 0x3F) as usize;
+                let idx2 = (reg2 & 0x3F) as usize;
+                match RegLocal::from(reg1) {
+                    RegLocal::REG32 => {
+                        self.regs32[idx1] |= self.regs32[idx2];
+                    }
+                    RegLocal::REG64 => {
+                        self.regs64[idx1] |= self.regs64[idx2];
+                    }
+                    RegLocal::REG128 => {
+                        self.regs128[idx1] |= self.regs128[idx2];
+                    }
+                }
+            }
+            Opcode::NOT => {
+                let reg = self.next_bytes(1)[0];
+                let idx = (reg & 0x3F) as usize;
+                match RegLocal::from(reg) {
+                    RegLocal::REG32 => {
+                        self.regs32[idx] = !self.regs32[idx];
+                    }
+                    RegLocal::REG64 => {
+                        self.regs64[idx] = !self.regs64[idx];
+                    }
+                    RegLocal::REG128 => {
+                        self.regs128[idx] = !self.regs128[idx];
+                    }
+                }
+            }
+            Opcode::XOR => {
+                let reg1 = self.next_bytes(1)[0];
+                let reg2 = self.next_bytes(1)[0];
+                let idx1 = (reg1 & 0x3F) as usize;
+                let idx2 = (reg2 & 0x3F) as usize;
+                match RegLocal::from(reg1) {
+                    RegLocal::REG32 => {
+                        self.regs32[idx1] ^= self.regs32[idx2];
+                    }
+                    RegLocal::REG64 => {
+                        self.regs64[idx1] ^= self.regs64[idx2];
+                    }
+                    RegLocal::REG128 => {
+                        self.regs128[idx1] ^= self.regs128[idx2];
+                    }
+                }
+            }
+
             Opcode::CAL => {
                 // We're going to pass off execution to another script
                 // Get the index as the next param
-
-                // Call that script if it exists
-
                 let idx = (self.next_bytes(1)[0] + 1) as usize;
+                // Call that script if it exists
                 if idx > self.libs.len() - 1 {
                     panic!("Cannot call lib with index {}, out of bounds!", idx - 1);
                 }
                 let mut cal_script = VMScript::new(&self.libs[idx..]);
-                self.regs32[0] = cal_script.run();
+                self.scriptRet = cal_script.run();
+            }
+            Opcode::RET => {
+                let reg = self.next_bytes(1)[0];
+                let idx = (reg & 0x3F) as usize;
+                // @TODO -- do we want retvals of each type?
+                self.scriptRet = match RegLocal::from(reg) {
+                    RegLocal::REG32 => {
+                        self.regs32[idx]
+                    }
+                    RegLocal::REG64 => {
+                        self.regs64[idx] as i32
+                    }
+                    RegLocal::REG128 => {
+                        self.regs128[idx] as i32
+                    }
+                }
             }
             _ => {
                 println!("Unknown opcode! {:?}", o);
@@ -617,7 +700,7 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs32[0], 1 + 100);
+        assert_eq!(test_vm.regs32[reg1 as usize], 1 + 100);
     }
 
     #[test]
@@ -647,7 +730,7 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs32[0], 1 - 100);
+        assert_eq!(test_vm.regs32[reg1 as usize], 1 - 100);
     }
 
     #[test]
@@ -677,7 +760,7 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs32[0], 2 * 100);
+        assert_eq!(test_vm.regs32[reg1 as usize], 2 * 100);
     }
 
     #[test]
@@ -707,7 +790,7 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs32[0], 100 / 3);
+        assert_eq!(test_vm.regs32[reg1 as usize], 100 / 3);
         assert_eq!(test_vm.rem32, 100 % 3);
     }
 
@@ -738,7 +821,119 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs32[0], 100 % 3);
+        assert_eq!(test_vm.regs32[reg1 as usize], 100 % 3);
+    }
+
+    #[test]
+    fn test_and32() {
+        let reg1: u8 = 0;
+        let reg2: u8 = 0 + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg1,
+                0x0,
+                0x0,
+                0x0,
+                100,
+                Opcode::LOD as u8,
+                reg2,
+                0,
+                0,
+                0,
+                3,
+                Opcode::AND as u8,
+                reg1,
+                reg2,
+                0,
+            ][..],
+        );
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[reg1 as usize], 100 & 3);
+    }
+
+    #[test]
+    fn test_or32() {
+        let reg1: u8 = 0;
+        let reg2: u8 = 0 + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg1,
+                0x0,
+                0x0,
+                0x0,
+                100,
+                Opcode::LOD as u8,
+                reg2,
+                0,
+                0,
+                0,
+                3,
+                Opcode::OR as u8,
+                reg1,
+                reg2,
+                0,
+            ][..],
+        );
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[reg1 as usize], 100 | 3);
+    }
+
+    #[test]
+    fn test_xor32() {
+        let reg1: u8 = 0;
+        let reg2: u8 = 0 + 1;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg1,
+                0x0,
+                0x0,
+                0x0,
+                100,
+                Opcode::LOD as u8,
+                reg2,
+                0,
+                0,
+                0,
+                3,
+                Opcode::XOR as u8,
+                reg1,
+                reg2,
+                0,
+            ][..],
+        );
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[reg1 as usize], 100 ^ 3);
+    }
+
+    #[test]
+    fn test_not32() {
+        let reg1: u8 = 0;
+        let script = Bytes::from(
+            &[
+                Opcode::LOD as u8,
+                reg1,
+                0x0,
+                0x0,
+                0x0,
+                100,
+                Opcode::NOT as u8,
+                reg1,
+                0,
+            ][..],
+        );
+        let script_arr = [script];
+        let mut test_vm = VMScript::new(&script_arr);
+        test_vm.run();
+        assert_eq!(test_vm.regs32[reg1 as usize], !100);
     }
 
     #[test]
@@ -774,7 +969,7 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs32[0], (100 / 3) * 3 - 3);
+        assert_eq!(test_vm.regs32[reg1 as usize], (100 / 3) * 3 - 3);
     }
 
     #[test]
@@ -812,7 +1007,7 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs64[0], 1 + 100);
+        assert_eq!(test_vm.regs64[(reg1 & 0x3F) as usize], 1 + 100);
     }
 
     #[test]
@@ -888,7 +1083,7 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs64[0], 2 * 100);
+        assert_eq!(test_vm.regs64[(reg1 & 0x3F) as usize], 2 * 100);
     }
 
     #[test]
@@ -928,7 +1123,7 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs64[0], 100 / 3);
+        assert_eq!(test_vm.regs64[(reg1 & 0x3F) as usize], 100 / 3);
         assert_eq!(test_vm.rem64, 100 % 3);
     }
 
@@ -969,7 +1164,7 @@ mod tests {
         let script_arr = [script];
         let mut test_vm = VMScript::new(&script_arr);
         test_vm.run();
-        assert_eq!(test_vm.regs64[0], 100 % 3);
+        assert_eq!(test_vm.regs64[(reg1 & 0x3F) as usize], 100 % 3);
     }
 
     #[test]

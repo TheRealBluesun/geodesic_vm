@@ -8,7 +8,7 @@ vmStr = ""
 
 
 idx = 0
-with open("./src/instructions.codegen.txt") as f:
+with open("./src/tools/instructions.codegen.txt") as f:
     for ins in f:
         tok = ins.strip()
         enumStr += "\t{0},\n".format(tok)
@@ -23,7 +23,7 @@ u8Str += "\t\t\t_=> Opcode::ERR\n\t\t}\n\t}\n}"
 # print(u8Str)
 # print(vmStr)
 
-with open("./src/opcodes.rs", 'w') as f:
+with open("./src/tools/opcodes.rs", 'w') as f:
     f.write(enumStr)
     f.write('\n\n')
     f.write(u8Str)
