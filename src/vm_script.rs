@@ -9,7 +9,6 @@ use std::mem::size_of;
 const REGSIZE: usize = 0xFF / 4;
 
 pub struct VMScript<'a> {
-    //vm_handle: &'a VM<'a>,
     pc: usize,  // Program Counter -- will be used as an index, could be u8 otherwise
     sp: usize,  // Stack Pointer -- although used for the 'heap'
     f_eq: bool, // is_equal flag
@@ -45,7 +44,6 @@ impl From<u8> for RegLocal {
 }
 
 impl<'a> VMScript<'a> {
-    //    pub fn new(bytes: &'a Bytes, vm: &'a mut VM<'a>) -> VMScript<'a> {
     pub fn new(libs: &'a [Bytes], heap: &'a mut BytesMut) -> VMScript<'a> {
         VMScript {
             pc: 0,
@@ -68,7 +66,6 @@ impl<'a> VMScript<'a> {
     pub fn reset(&mut self) {
         self.pc = 0;
         self.sp = 0;
-        //self.heap = vec![];  // TODO -- clear the heap?
         self.rem32 = 0;
         self.rem64 = 0;
         self.rem128 = 0;
@@ -88,7 +85,7 @@ impl<'a> VMScript<'a> {
         true
     }
 
-    // Expected return value is "shuld we keep running"
+    // Expected return value is "should we keep running"
     fn step(&mut self) -> bool {
         // Get opcode from script
         let o = Opcode::from(self.next_bytes(1)[0]);
@@ -102,7 +99,6 @@ impl<'a> VMScript<'a> {
                 let reg = self.next_bytes(1)[0];
                 let r = RegLocal::from(reg);
                 let idx = (reg & 0x3F) as usize;
-                println!("LOD Reg: {:?}", r);
                 match r {
                     RegLocal::REG32 => {
                         let val = self.read_u32();
@@ -399,12 +395,8 @@ impl<'a> VMScript<'a> {
                         }
                         self.sp += sz;
                     }
-                    RegLocal::REG64 => {
-                        // self.regs64[idx1] ^= self.regs64[idx2];
-                    }
-                    RegLocal::REG128 => {
-                        // self.regs128[idx1] ^= self.regs128[idx2];
-                    }
+                    RegLocal::REG64 => {}
+                    RegLocal::REG128 => {}
                 }
             }
             Opcode::POP => {
@@ -413,7 +405,7 @@ impl<'a> VMScript<'a> {
                 match RegLocal::from(reg) {
                     RegLocal::REG32 => {
                         let sz = size_of::<u32>();
-                        if(self.sp < sz){
+                        if self.sp < sz {
                             panic!("Attempted to pop more bytes than exist!");
                         }
                         let (_, heap_val) = self.heap.split_at(self.sp - sz);
@@ -423,17 +415,12 @@ impl<'a> VMScript<'a> {
                         }
                         self.sp -= sz;
                     }
-                    RegLocal::REG64 => {
-                        // self.regs64[idx1] ^= self.regs64[idx2];
-                    }
-                    RegLocal::REG128 => {
-                        // self.regs128[idx1] ^= self.regs128[idx2];
-                    }
+                    RegLocal::REG64 => {}
+                    RegLocal::REG128 => {}
                 }
             }
             _ => {
-                println!("Unknown opcode! {:?}", o);
-                return false;
+                panic!("Unknown opcode! {:?}", o);
             }
         }
         true
@@ -450,16 +437,6 @@ impl<'a> VMScript<'a> {
     fn read_u32(&mut self) -> u32 {
         let sz = size_of::<u32>();
         let b = self.next_bytes(sz);
-        let mut val = u32::from(b[sz - 1]);
-        for (i, v) in b.iter().enumerate().take(sz - 1) {
-            val += (u32::from(*v)) << ((sz - 1 - i) * 8);
-        }
-        val
-    }
-
-    fn heap_read_u32(&mut self) -> u32 {
-        let sz = size_of::<u32>();
-        let b = &self.heap[self.sp - sz..self.sp];
         let mut val = u32::from(b[sz - 1]);
         for (i, v) in b.iter().enumerate().take(sz - 1) {
             val += (u32::from(*v)) << ((sz - 1 - i) * 8);
@@ -487,7 +464,7 @@ impl<'a> VMScript<'a> {
         val
     }
 }
-// /*
+
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
@@ -528,7 +505,7 @@ mod tests {
         let mut test_vm = VMScript::new(&script_arr, &mut heap);
         assert!(test_vm.run());
         assert_eq!(test_vm.regs32[reg as usize], 0x0FFFFFFF);
-        assert_eq!(test_vm.regs32[(reg+1) as usize], 0x0FFFFFFF);
+        assert_eq!(test_vm.regs32[(reg + 1) as usize], 0x0FFFFFFF);
     }
 
     #[test]
