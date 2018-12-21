@@ -33,13 +33,13 @@ mod tests {
         let reg = 0;
         let script = &[
             Bytes::from(&[Opcode::CAL as u8, 0x0, 0][..]),
-            Bytes::from(&[Opcode::CAL as u8, 0x1, 0][..]),
-            Bytes::from(&[Opcode::LOD as u8, reg, 0xFF, 0xFF, 0xFF, 0xFF, Opcode::PSH as u8, reg, 0][..]),
+            Bytes::from(&[Opcode::LOD as u8, reg, 0xFF, 0xFF, 0xFF, 0xFF, Opcode::PSH as u8, reg, Opcode::CAL as u8, 0x0, 0][..]),
+            Bytes::from(&[Opcode::CAL as u8, 0x0, 0][..]),
             Bytes::from(&[Opcode::LOD as u8, reg, 0x0, 0x0, 0x0, 0xFF, Opcode::PSH as u8, reg, 0][..]),
         ];
         let mut test_vm = VM::new(script);
-        let ret = test_vm.run();
-        assert_eq!(ret, true);
+        assert_eq!(test_vm.run(), true);
+        assert_eq!(test_vm.heap, Bytes::from(&[0xFF,0xFF,0xFF,0xFF,0xFF,0x0,0x0,0x0][..]));
     }
 
    

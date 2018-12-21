@@ -392,9 +392,10 @@ impl<'a> VMScript<'a> {
                 match RegLocal::from(reg) {
                     RegLocal::REG32 => {
                         let sz = size_of::<u32>();
-                        for i in 0..sz - 1 {
+                        for i in 0..sz {
                             println!("Size of heap is {}", self.heap.len());
-                            self.heap.put((self.regs32[idx] >> i) as u8);
+                            self.heap.put((self.regs32[idx] >> (i * 8)) as u8);
+                            println!("{:X}", (self.regs32[idx] >> (i * 8)) as u8);
                         }
                         self.sp += sz;
                     }
@@ -412,10 +413,15 @@ impl<'a> VMScript<'a> {
                 match RegLocal::from(reg) {
                     RegLocal::REG32 => {
                         let sz = size_of::<u32>();
-                        let (self.heap,heap_val) = self.heap.split_at(self.sp-sz );
-                        for i in 0..sz - 1 {
-                            self.regs32[idx] += heap_val[i] << i;
+                        if(self.sp < sz){
+                            panic!("Attempted to pop more bytes than exist!");
                         }
+                        let (_, heap_val) = self.heap.split_at(self.sp - sz);
+                        for i in 0..(sz) {
+                            self.regs32[idx] += (heap_val[i] as i32) << (i * 8);
+                            println!("{} {:X} += {:X}", i, self.regs32[idx], heap_val[i]);
+                        }
+                        self.sp -= sz;
                     }
                     RegLocal::REG64 => {
                         // self.regs64[idx1] ^= self.regs64[idx2];
@@ -496,27 +502,33 @@ mod tests {
             &[
                 Opcode::LOD as u8,
                 reg,
-                0xFF,
+                0x0F,
                 0xFF,
                 0xFF,
                 0xFF,
                 Opcode::PSH as u8,
                 reg,
+                Opcode::PSH as u8,
+                reg,
                 Opcode::LOD as u8,
+                reg,
                 0,
                 0,
                 0,
                 0,
                 Opcode::POP as u8,
                 reg,
+                Opcode::POP as u8,
+                reg + 1,
                 0,
             ][..],
         );
         let script_arr = [script];
         let mut heap = BytesMut::with_capacity(0xFF);
         let mut test_vm = VMScript::new(&script_arr, &mut heap);
-        test_vm.run();
-        assert_eq!(test_vm.regs32[0], -1);
+        assert!(test_vm.run());
+        assert_eq!(test_vm.regs32[reg as usize], 0x0FFFFFFF);
+        assert_eq!(test_vm.regs32[(reg+1) as usize], 0x0FFFFFFF);
     }
 
     #[test]
